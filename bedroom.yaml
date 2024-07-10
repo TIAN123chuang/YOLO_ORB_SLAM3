@@ -1,0 +1,57 @@
+%YAML:1.0
+ 
+#--------------------------------------------------------------------------------------------
+# 相机参数，根据自己手机相机的参数调整
+#--------------------------------------------------------------------------------------------
+ 
+# 相机标定和失真参数(OpenCV) 
+Camera.fx: 500.0
+Camera.fy: 500.0
+Camera.cx: 320.0
+Camera.cy: 240.0
+ 
+Camera.k1: 0
+Camera.k2: 0
+Camera.p1: 0
+Camera.p2: 0
+Camera.k3: 0
+ 
+# 相机每秒帧数 
+Camera.fps: 30.0
+ 
+# 图像的颜色顺序 (0: BGR, 1: RGB. 如果图像是灰度图就忽略)
+Camera.RGB: 0
+ 
+#--------------------------------------------------------------------------------------------
+# ORB 参数
+#--------------------------------------------------------------------------------------------
+ 
+# ORB Extractor: 每张图的特征点数量
+ORBextractor.nFeatures: 1000
+ 
+# ORB Extractor: 在比例金字塔的层次之间的比例因子 
+ORBextractor.scaleFactor: 1.2
+ 
+# ORB Extractor: 刻度金字塔中的层数   
+ORBextractor.nLevels: 8
+ 
+# ORB Extractor: 快速阈值
+# 图像被划分在网格中。在每个网格中提取FAST，施加最小的响应。
+# 如果没有检测到拐角，我们施加一个较低的值minThFAST
+# 如果图像对比度低，可以降低这些值        
+ORBextractor.iniThFAST: 10
+ORBextractor.minThFAST: 5
+ 
+#--------------------------------------------------------------------------------------------
+# Viewer 参数
+#--------------------------------------------------------------------------------------------
+Viewer.KeyFrameSize: 0.05
+Viewer.KeyFrameLineWidth: 1
+Viewer.GraphLineWidth: 0.9
+Viewer.PointSize: 2
+Viewer.CameraSize: 0.08
+Viewer.CameraLineWidth: 3
+Viewer.ViewpointX: 0
+Viewer.ViewpointY: -0.7
+Viewer.ViewpointZ: -1.8
+Viewer.ViewpointF: 500

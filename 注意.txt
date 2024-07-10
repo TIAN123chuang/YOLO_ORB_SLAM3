@@ -1,0 +1,104 @@
+用类别区分动态
+
+include文件夹
+YoloDetect.h
+ORBextractor.h
+84行       std::vector<cv::Rect2i> mvDynamicArea;
+system.h
+42行     #include "YoloDetect.h"
+267行     YoloDetection* mpDetector;
+tracking.h
+44行     #include "YoloDetect.h"
+82行       void SetDetector(YoloDetection* pDetector);
+289行      YoloDetection* mpDetector;
+
+Viewer.h
+68-72行  
+    std::vector<cv::Rect2i> mvPersonArea;
+    map<string, vector<cv::Rect2i>> mmDetectMap;
+
+
+    std::mutex mMutexPAFinsh;
+
+src文件夹
+YoloDetect.cpp
+
+viewer.cc
+338行
+ // Yolo
+        {
+            std::unique_lock<std::mutex> lock(mMutexPAFinsh);
+            for (auto vit = mmDetectMap.begin(); vit != mmDetectMap.end(); vit++)
+            {
+                if (vit->second.size() != 0)
+                {
+                    for (auto area : vit->second)
+                    {
+                        cv::rectangle(toShow, area, cv::Scalar(0, 0, 255), 1);
+                        cv::putText(toShow,
+                                    vit->first,
+                                    cv::Point(area.x, area.y),
+                                    cv::FONT_HERSHEY_SIMPLEX, 1, cv::Scalar(0, 0, 0), 2);
+                    }
+                }
+
+            }
+        }
+ORBextractor.cc
+871-907行
+                    // Delete kp
+                    float scale = mvScaleFactor[level];
+                    for (auto vit = vToDistributeKeys.begin(); vit != vToDistributeKeys.end(); vit++)
+                    {
+                        vit->pt.x += minBorderX;
+                        vit->pt.y += minBorderY;
+                        vit->pt *= scale;
+                    }
+
+                    bool Find = false;
+                    for (auto vit_kp = vToDistributeKeys.begin(); vit_kp != vToDistributeKeys.end();)
+                    {
+                        for (auto vit_area = mvDynamicArea.begin(); vit_area != mvDynamicArea.end(); vit_area++)
+                        {
+                            Find = false;
+                            if (vit_area->contains(vit_kp->pt))
+                            {
+                                Find = true;
+                                vit_kp = vToDistributeKeys.erase(vit_kp);
+                                break;
+                            }
+                        }
+
+                        if (!Find)
+                        {
+                            ++vit_kp;
+                            Find = false;
+                        }
+                    }
+
+                    float scale_inverse = 1 / scale;
+                    for (auto vit = vToDistributeKeys.begin(); vit != vToDistributeKeys.end(); vit++)
+                    {
+                        vit->pt *= scale_inverse;
+                        vit->pt.x -= minBorderX;
+                        vit->pt.y -= minBorderY;
+                    }
+
+system.cc
+186-187行
+   mpDetector = new YoloDetection();
+199行
+    mpTracker->SetDetector(mpDetector);
+Tracking.cc
+1531-1541行
+    cv::Mat InputImage;
+    InputImage = imRGB.clone();
+    mpDetector->GetImage(InputImage);
+    mpDetector->Detect();
+    mpORBextractorLeft->mvDynamicArea = mpDetector->mvDynamicArea;
+    {
+        std::unique_lock<std::mutex> lock(mpViewer->mMutexPAFinsh);
+        mpViewer->mmDetectMap = mpDetector->mmDetectMap;
+    }
+    mpDetector->mvDynamicArea.clear();
+    mpDetector->mmDetectMap.clear();

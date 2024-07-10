@@ -1,0 +1,139 @@
+    检查检测到的类别名称是否在 mvDynamicNames 列表中。如果是，则将其添加到 mvDynamicArea 列表中，表示这些区域是动态区域
+
+在前面的代码中，动态区域（`mvDynamicArea`）是通过目标检测模块`YoloDetection`检测到的。具体流程如下：
+
+1. **目标检测**：
+   - 使用YOLO模型对输入图像进行目标检测，生成预测结果。
+   - 通过非极大值抑制（NMS）处理预测结果，过滤掉重叠的检测框，保留置信度较高的检测框。
+   - 将检测框对应的类别与动态类别列表（`mvDynamicNames`）匹配，确定哪些检测框属于动态区域。
+
+2. **更新动态区域**：
+   - 将属于动态类别的检测框（即动态区域）存储到`mvDynamicArea`中。
+
+### 具体代码说明
+
+#### 1. 目标检测并生成预测结果
+这部分代码使用YOLO模型对输入图像进行目标检测，生成预测结果`preds`：
+```cpp
+cv::resize(mRGB, img, cv::Size(640, 380));
+cv::cvtColor(img, img, cv::COLOR_BGR2RGB);
+torch::Tensor imgTensor = torch::from_blob(img.data, {img.rows, img.cols, 3}, torch::kByte);
+imgTensor = imgTensor.permute({2, 0, 1});
+imgTensor = imgTensor.toType(torch::kFloat);
+imgTensor = imgTensor.div(255);
+imgTensor = imgTensor.unsqueeze(0);
+
+torch::Tensor preds = mModule.forward({imgTensor}).toTuple()->elements()[0].toTensor();
+```
+
+#### 2. 非极大值抑制（NMS）
+这部分代码通过NMS处理预测结果，过滤掉重叠的检测框，保留置信度较高的检测框：
+```cpp
+std::vector<torch::Tensor> dets = YoloDetection::non_max_suppression(preds, 0.4, 0.5);
+```
+
+#### 3. 更新动态区域
+这部分代码将属于动态类别的检测框存储到`mvDynamicArea`中：
+```cpp
+if (dets.size() > 0)
+{
+    // Visualize result
+    for (size_t i = 0; i < dets[0].sizes()[0]; ++i)
+    {
+        float left = dets[0][i][0].item().toFloat() * mRGB.cols / 640;
+        float top = dets[0][i][1].item().toFloat() * mRGB.rows / 384;
+        float right = dets[0][i][2].item().toFloat() * mRGB.cols / 640;
+        float bottom = dets[0][i][3].item().toFloat() * mRGB.rows / 384;
+        int classID = dets[0][i][5].item().toInt();
+
+        cv::Rect2i DetectArea(left, top, (right - left), (bottom - top));
+        mmDetectMap[mClassnames[classID]].push_back(DetectArea);
+
+        if (count(mvDynamicNames.begin(), mvDynamicNames.end(), mClassnames[classID]))
+        {
+            cv::Rect2i DynamicArea(left, top, (right - left), (bottom - top));
+            mvDynamicArea.push_back(DynamicArea);
+        }
+    }
+
+    if (mvDynamicArea.size() == 0)
+    {
+        cv::Rect2i tDynamicArea(1, 1, 1, 1);
+        mvDynamicArea.push_back(tDynamicArea);
+    }
+}
+```
+### 总结
+通过目标检测和非极大值抑制处理，最终得到的`mvDynamicArea`包含了所有被判定为动态区域的检测框。在后续的特征提取过程中，ORB特征提取器可以使用这些动态区域信息，避免在这些区域内提取特征点或者进行特别处理。这样可以提高图像处理的鲁棒性和准确性。
+
+
+
+将mpDetector中的动态区域列表mvDynamicArea赋值给mpORBextractorLeft的动态区域列表mvDynamicArea
+即将mpORBextractorLeft的
+这段代码的目的是处理一组关键点（keypoints），首先对其坐标进行尺度变换和平移，然后将这些关键点与一组动态区域进行比较，并删除落在这些区域内的关键点。最后，再对剩余的关键点进行逆尺度变换和平移，以恢复到原始坐标系。
+
+### 代码详细解释
+
+1. **尺度变换和平移关键点**：
+   ```cpp
+   float scale = mvScaleFactor[level];
+   for (auto vit = vToDistributeKeys.begin(); vit != vToDistributeKeys.end(); vit++)
+   {
+       vit->pt.x += minBorderX;
+       vit->pt.y += minBorderY;
+       vit->pt *= scale;
+   }
+   ```
+   - `scale` 从 `mvScaleFactor` 数组中获取当前层级的尺度因子。
+   - 遍历所有关键点 `vToDistributeKeys`，对每个关键点的坐标进行平移（加上 `minBorderX` 和 `minBorderY`），然后按比例 `scale` 进行缩放。
+
+2. **删除落在动态区域内的关键点**：
+   ```cpp
+   bool Find = false;
+   for (auto vit_kp = vToDistributeKeys.begin(); vit_kp != vToDistributeKeys.end();)
+   {
+       for (auto vit_area = mvDynamicArea.begin(); vit_area != mvDynamicArea.end(); vit_area++)
+       {
+           Find = false;
+           if (vit_area->contains(vit_kp->pt))
+           {
+               Find = true;
+               vit_kp = vToDistributeKeys.erase(vit_kp);
+               break;
+           }
+       }
+
+       if (!Find)
+       {
+           ++vit_kp;
+           Find = false;
+       }
+   }
+   ```
+   - `Find` 标志位用于标记是否找到并删除了一个关键点。
+   - 外层循环遍历所有关键点 `vToDistributeKeys`。
+   - 内层循环遍历所有动态区域 `mvDynamicArea`，检查当前关键点是否落在任何一个动态区域内。
+   - 如果关键点在某个动态区域内，则删除该关键点，并标记 `Find` 为 `true`，同时退出内层循环。
+   - 如果关键点不在任何动态区域内，则继续下一个关键点。
+
+3. **逆尺度变换和平移关键点**：
+   ```cpp
+   float scale_inverse = 1 / scale;
+   for (auto vit = vToDistributeKeys.begin(); vit != vToDistributeKeys.end(); vit++)
+   {
+       vit->pt *= scale_inverse;
+       vit->pt.x -= minBorderX;
+       vit->pt.y -= minBorderY;
+   }
+   ```
+   - 计算逆尺度因子 `scale_inverse`。
+   - 遍历剩余的关键点，对每个关键点的坐标进行逆尺度变换（乘以 `scale_inverse`），然后进行逆平移（减去 `minBorderX` 和 `minBorderY`）。
+
+### 代码总结
+
+这段代码实现了以下几个步骤：
+1. 对关键点进行平移和尺度变换，使其适应当前层级的坐标系。
+2. 遍历所有关键点和动态区域，删除落在任何动态区域内的关键点。
+3. 对剩余的关键点进行逆平移和逆尺度变换，恢复其原始坐标。
+
+通过这段处理，可以在不同尺度和坐标系下进行关键点的过滤操作，去除那些落在动态区域内的无效关键点，确保后续处理只包含有效的关键点。

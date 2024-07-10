@@ -1,0 +1,3 @@
+相机类型：ORBSLAM3中支持两种相机类型PinHole和KannalaBrandt8。除这两种相机类型外，其余类型或者不给出具体类型时程序报错Not Supported Camera Sensor
+
+用PinHole
